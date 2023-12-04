@@ -86,22 +86,28 @@ end
     return (i1, i2)
 end
 
+@kernel function prolong2interfaces_p4est_3d_kernel!(u, interfaces_u, interfaces_neighbor_ids, interfaces_node_indices, equations, num_nodes)
+    interface = @index(Global)
+    prolong2interfaces_p4est_3d_internal!(u, interface, interfaces_u, interfaces_neighbor_ids, interfaces_node_indices, equations, num_nodes)
+end
+
 function prolong2interfaces_gpu!(cache, u,
                              mesh::P4estMesh{3},
                              equations, surface_integral, dg::DG)
-    @kernel function prolong2interfaces_kernel!(u, interfaces_u, interfaces_neighbor_ids, interfaces_node_indices, equations, num_nodes)
-        interface = @index(Global)
-        prolong2interfaces_p4est_3d_internal!(u, interface, interfaces_u, interfaces_neighbor_ids, interfaces_node_indices, equations, num_nodes)
-    end
+    #@kernel function prolong2interfaces_kernel!(u, interfaces_u, interfaces_neighbor_ids, interfaces_node_indices, equations, num_nodes)
+    #    interface = @index(Global)
+    #    prolong2interfaces_p4est_3d_internal!(u, interface, interfaces_u, interfaces_neighbor_ids, interfaces_node_indices, equations, num_nodes)
+    #end
 
     @unpack interfaces = cache
+    @unpack prolong2interfaces_kernel! = cache.kernels
     backend = get_backend(u)
 
-    kernel! = prolong2interfaces_kernel!(backend)
+    #kernel! = prolong2interfaces_kernel!(backend)
     num_nodes = nnodes(dg)
     num_interfaces = ninterfaces(cache.interfaces)
 
-    kernel!(u, interfaces.u, interfaces.neighbor_ids, interfaces.node_indices, equations, num_nodes, ndrange=num_interfaces)
+    prolong2interfaces_kernel!(u, interfaces.u, interfaces.neighbor_ids, interfaces.node_indices, equations, num_nodes, ndrange=num_interfaces)
     #synchronize(backend)
 
     return nothing
@@ -187,33 +193,49 @@ end
     end
 end
 
-function calc_interface_flux_gpu!(surface_flux_values,
-                              mesh::P4estMesh{3},
-                              nonconservative_terms,
-                              equations, surface_integral, dg::DG, cache)
-    @kernel function calc_interface_flux_kernel!(interfaces_u, interfaces_neighbor_ids, interfaces_node_indices,
+@kernel function calc_interface_flux_p4est_3d_kernel!(interfaces_u, interfaces_neighbor_ids, interfaces_node_indices,
                                                 nonconservative_terms,
                                                 surface_flux_values, surface_flux,
                                                 contravariant_vectors,
                                                 equations, num_nodes)
-        interface = @index(Global)
-        calc_interface_flux_p4est_3d_internal!(interface,
-                                      interfaces_u, interfaces_neighbor_ids, interfaces_node_indices,
-                                      nonconservative_terms,
-                                      surface_flux_values, surface_flux,
-                                      contravariant_vectors,
-                                      equations, num_nodes)
-    end
+    interface = @index(Global)
+    calc_interface_flux_p4est_3d_internal!(interface,
+                                    interfaces_u, interfaces_neighbor_ids, interfaces_node_indices,
+                                    nonconservative_terms,
+                                    surface_flux_values, surface_flux,
+                                    contravariant_vectors,
+                                    equations, num_nodes)
+end
+
+
+function calc_interface_flux_gpu!(surface_flux_values,
+                              mesh::P4estMesh{3},
+                              nonconservative_terms,
+                              equations, surface_integral, dg::DG, cache)
+    #@kernel function calc_interface_flux_kernel!(interfaces_u, interfaces_neighbor_ids, interfaces_node_indices,
+    #                                            nonconservative_terms,
+    #                                            surface_flux_values, surface_flux,
+    #                                            contravariant_vectors,
+    #                                            equations, num_nodes)
+    #    interface = @index(Global)
+    #    calc_interface_flux_p4est_3d_internal!(interface,
+    #                                  interfaces_u, interfaces_neighbor_ids, interfaces_node_indices,
+    #                                  nonconservative_terms,
+    #                                  surface_flux_values, surface_flux,
+    #                                  contravariant_vectors,
+    #                                  equations, num_nodes)
+    #end
 
     @unpack interfaces = cache
     @unpack contravariant_vectors = cache.elements
+    @unpack calc_interface_flux_kernel! = cache.kernels
     backend = get_backend(interfaces.u) # Caution: May not work if interfaces.u is not initialized on the GPU
 
-    kernel! = calc_interface_flux_kernel!(backend)
+    #kernel! = calc_interface_flux_kernel!(backend)
     num_nodes = nnodes(dg)
     num_interfaces = ninterfaces(cache.interfaces)
 
-    kernel!(interfaces.u, interfaces.neighbor_ids, interfaces.node_indices,
+    calc_interface_flux_kernel!(interfaces.u, interfaces.neighbor_ids, interfaces.node_indices,
             nonconservative_terms,
             surface_flux_values, surface_integral.surface_flux,
             contravariant_vectors,
@@ -844,25 +866,33 @@ function calc_surface_integral!(du, u,
     return nothing
 end
 
+@kernel function calc_surface_integral_p4est_3d_kernel!(du, surface_flux_values, boundary_interpolation, equations, num_nodes)
+    element = @index(Global)
+    factor_1 = boundary_interpolation[1, 1]
+    factor_2 = boundary_interpolation[num_nodes, 2]
+    calc_surface_integral_p4est_3d_internal!(du, element, surface_flux_values, factor_1, factor_2, equations, num_nodes)
+end
+
 function calc_surface_integral_gpu!(du, u,
                                 mesh::P4estMesh{3},
                                 equations,
                                 surface_integral::SurfaceIntegralWeakForm,
                                 dg::DGSEM, cache)
-    @kernel function calc_surface_integral_kernel!(du, surface_flux_values, boundary_interpolation, equations, num_nodes)
-        element = @index(Global)
-        factor_1 = boundary_interpolation[1, 1]
-        factor_2 = boundary_interpolation[num_nodes, 2]
-        calc_surface_integral_p4est_3d_internal!(du, element, surface_flux_values, factor_1, factor_2, equations, num_nodes)
-    end
+    #@kernel function calc_surface_integral_kernel!(du, surface_flux_values, boundary_interpolation, equations, num_nodes)
+    #    element = @index(Global)
+    #    factor_1 = boundary_interpolation[1, 1]
+    #    factor_2 = boundary_interpolation[num_nodes, 2]
+    #    calc_surface_integral_p4est_3d_internal!(du, element, surface_flux_values, factor_1, factor_2, equations, num_nodes)
+    #end
 
     @unpack boundary_interpolation = dg.basis
     @unpack surface_flux_values = cache.elements
+    @unpack calc_surface_integral_kernel! = cache.kernels
 
     backend = get_backend(u)
-    kernel! = calc_surface_integral_kernel!(backend)
+    #kernel! = calc_surface_integral_kernel!(backend)
 
-    kernel!(du, surface_flux_values, boundary_interpolation, equations, nnodes(dg), ndrange=nelements(cache.elements))
+    calc_surface_integral_kernel!(du, surface_flux_values, boundary_interpolation, equations, nnodes(dg), ndrange=nelements(cache.elements))
     #synchronize(backend)
 
     return nothing

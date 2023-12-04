@@ -110,26 +110,32 @@ See also https://github.com/trixi-framework/Trixi.jl/issues/1671#issuecomment-17
     return nothing
 end
 
+@kernel function calc_volume_integral_structed_3d_kernel!(du, u, derivative_split, contravariant_vectors, volume_flux, equations, alpha, num_nodes)
+    element = @index(Global)
+    flux_differencing_kernel_internal!(du, u, element, derivative_split, contravariant_vectors, volume_flux, equations, alpha, num_nodes)
+end
+
 function calc_volume_integral_gpu!(du, u,
                                    mesh::Union{StructuredMesh{3}, P4estMesh{3}},
                                    nonconservative_terms, equations,
                                    volume_integral::VolumeIntegralFluxDifferencing,
                                    dg::DGSEM, cache)
-    @kernel function calc_volume_integral_gpu_kernel!(du, u, derivative_split, contravariant_vectors, volume_flux, equations, alpha, num_nodes)
-        element = @index(Global)
-        flux_differencing_kernel_internal!(du, u, element, derivative_split, contravariant_vectors, volume_flux, equations, alpha, num_nodes)
-    end
+    #@kernel function calc_volume_integral_gpu_kernel!(du, u, derivative_split, contravariant_vectors, volume_flux, equations, alpha, num_nodes)
+    #    element = @index(Global)
+    #    flux_differencing_kernel_internal!(du, u, element, derivative_split, contravariant_vectors, volume_flux, equations, alpha, num_nodes)
+    #end
 
     @unpack derivative_split = dg.basis
     @unpack contravariant_vectors = cache.elements
+    @unpack calc_volume_integral_kernel! = cache.kernels
 
     backend = get_backend(u)
-    kernel! = calc_volume_integral_gpu_kernel!(backend)
+    #kernel! = calc_volume_integral_gpu_kernel!(backend)
 
     num_nodes = nnodes(dg)
     num_elements = nelements(cache.elements)
 
-    kernel!(du, u, derivative_split, contravariant_vectors, volume_integral.volume_flux, equations, true, num_nodes, ndrange=num_elements)
+    calc_volume_integral_kernel!(du, u, derivative_split, contravariant_vectors, volume_integral.volume_flux, equations, true, num_nodes, ndrange=num_elements)
     #synchronize(backend)
 end
 
@@ -831,20 +837,26 @@ function calc_boundary_flux!(cache, u, t, boundary_conditions::NamedTuple,
     end
 end
 
+@kernel function apply_jacobian_structured_3d_kernel!(du, inverse_jacobian, equations, num_nodes)
+    element = @index(Global)
+    apply_jacobian_structured_3d_internal!(du, element, inverse_jacobian, equations, num_nodes)
+end
+
 function apply_jacobian_gpu!(du,
                          mesh::Union{StructuredMesh{3}, P4estMesh{3}},
                          equations, dg::DG, cache)
-    @kernel function apply_jacobian_kernel!(du, inverse_jacobian, equations, num_nodes)
-        element = @index(Global)
-        apply_jacobian_structured_3d_internal!(du, element, inverse_jacobian, equations, num_nodes)
-    end
+    #@kernel function apply_jacobian_kernel!(du, inverse_jacobian, equations, num_nodes)
+    #    element = @index(Global)
+    #    apply_jacobian_structured_3d_internal!(du, element, inverse_jacobian, equations, num_nodes)
+    #end
 
     @unpack inverse_jacobian = cache.elements
+    @unpack apply_jacobian_kernel! = cache.kernels 
     backend = get_backend(du)
 
-    kernel! = apply_jacobian_kernel!(backend)
+    #kernel! = apply_jacobian_kernel!(backend)
 
-    kernel!(du, inverse_jacobian, equations, nnodes(dg), ndrange=nelements(cache.elements))
+    apply_jacobian_kernel!(du, inverse_jacobian, equations, nnodes(dg), ndrange=nelements(cache.elements))
     #synchronize(backend)
 
     return nothing

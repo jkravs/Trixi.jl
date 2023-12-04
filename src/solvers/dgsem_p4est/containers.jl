@@ -5,6 +5,25 @@
 @muladd begin
 #! format: noindent
 
+struct KernelContainer
+    calc_volume_integral_kernel!
+    prolong2interfaces_kernel!
+    calc_interface_flux_kernel!
+    calc_surface_integral_kernel!
+    apply_jacobian_kernel!
+end
+
+function init_kernels(backend::Backend)
+    volume_integral! = calc_volume_integral_structed_3d_kernel!(backend)
+    prolong2interfaces! = prolong2interfaces_p4est_3d_kernel!(backend)
+    interface_flux! = calc_interface_flux_p4est_3d_kernel!(backend)
+    surface_integral! = calc_surface_integral_p4est_3d_kernel!(backend)
+    apply_jacobian! = apply_jacobian_structured_3d_kernel!(backend)
+    
+    kernels = KernelContainer(volume_integral!, prolong2interfaces!, interface_flux!, surface_integral!, apply_jacobian!)
+    return kernels
+end
+
 mutable struct P4estElementContainer{NDIMS, RealT <: Real, uEltype <: Real, NDIMSP1,
                                      NDIMSP2, NDIMSP3, contravariantVectorArray <: DenseArray{RealT, NDIMSP3},
                                                        inverseJacobianArray <: DenseArray{RealT, NDIMSP1},
